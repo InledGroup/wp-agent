@@ -41,7 +41,7 @@ STAGE="dist/${PLUGIN}"
 mkdir -p "${STAGE}"
 
 # Copy the plugin, excluding repo/build artifacts.
-cp -r "${MAIN}" readme.txt uninstall.php includes assets "${STAGE}/"
+cp -r "${MAIN}" README.md uninstall.php includes assets "${STAGE}/"
 rm -rf "${STAGE}/includes/.DS_Store" "${STAGE}/assets/.DS_Store"
 
 ZIP="dist/${PLUGIN}-${VERSION}.zip"
