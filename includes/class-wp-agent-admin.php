@@ -192,9 +192,21 @@ class WPAgent_Admin {
 													echo '<label class="wpa-perm-label"><input type="checkbox" name="perms[' . esc_attr( $perm ) . ']" value="1" ' . $checked . '> ' . esc_html( $perm ) . '</label>';
 												}
 												?>
-												<label class="wpa-perm-label" title="<?php esc_attr_e( 'When checked, this key ignores global permissions and only uses its own.', 'wp-agent' ); ?>">
+												<label class="wpa-perm-label" title="<?php esc_attr_e( 'When checked, this key ignores global settings and only uses its own (permissions, whitelist and blacklist).', 'wp-agent' ); ?>">
 													<input type="checkbox" name="override" value="1" <?php echo ! empty( $key['override'] ) ? 'checked' : ''; ?>> <?php esc_html_e( 'override global', 'wp-agent' ); ?>
 												</label>
+												<details class="wpa-lists">
+													<summary><?php esc_html_e( 'Command whitelist / blacklist', 'wp-agent' ); ?></summary>
+													<label class="wpa-perm-label">
+														<input type="checkbox" name="wl_enabled" value="1" <?php echo ! empty( $key['wl_enabled'] ) ? 'checked' : ''; ?>>
+														<?php esc_html_e( 'Enable whitelist for this key', 'wp-agent' ); ?>
+													</label>
+													<label class="wpa-field-label" for="wpa-wl-<?php echo esc_attr( $key['id'] ); ?>"><?php esc_html_e( 'Whitelist (one command per line)', 'wp-agent' ); ?></label>
+													<textarea id="wpa-wl-<?php echo esc_attr( $key['id'] ); ?>" name="whitelist" class="large-text code" rows="5" placeholder="option get&#10;post list"><?php echo esc_textarea( implode( "\n", $key['whitelist'] ) ); ?></textarea>
+													<label class="wpa-field-label" for="wpa-bl-<?php echo esc_attr( $key['id'] ); ?>"><?php esc_html_e( 'Blacklist (one command per line)', 'wp-agent' ); ?></label>
+													<textarea id="wpa-bl-<?php echo esc_attr( $key['id'] ); ?>" name="blacklist" class="large-text code" rows="3"><?php echo esc_textarea( implode( "\n", $key['blacklist'] ) ); ?></textarea>
+													<p class="description"><?php esc_html_e( 'With "override global" on, these replace the global lists (empty whitelist = block everything). Off, they are added to the global lists.', 'wp-agent' ); ?></p>
+												</details>
 												<?php submit_button( __( 'Save', 'wp-agent' ), 'button button-small', 'submit', false ); ?>
 											</form>
 										<?php else : ?>
@@ -233,7 +245,7 @@ class WPAgent_Admin {
 						<?php
 						printf(
 							/* translators: %1$s: global read permission, %2$s: global exec permission. */
-							esc_html__( 'Global permissions: read = %1$s, exec = %2$s. Keys with "override global" only use their own permissions.', 'wp-agent' ),
+							esc_html__( 'Global permissions: read = %1$s, exec = %2$s. Keys with "override global" use only their own permissions, whitelist and blacklist.', 'wp-agent' ),
 							$global['read'] ? esc_html__( 'allowed', 'wp-agent' ) : esc_html__( 'blocked', 'wp-agent' ),
 							$global['exec'] ? esc_html__( 'allowed', 'wp-agent' ) : esc_html__( 'blocked', 'wp-agent' )
 						);
@@ -249,42 +261,43 @@ class WPAgent_Admin {
 	 * Agent setup tab: copyable prompt for AI agents.
 	 */
 	protected static function render_setup_tab() {
-		$keys = WPAgent_Keys::all();
-		$key  = null;
-		if ( ! empty( $keys ) ) {
-			// Pick the first active key by default.
-			foreach ( $keys as $k ) {
-				if ( 'active' === $k['status'] ) {
-					$key = $k;
-					break;
-				}
+		$keys  = WPAgent_Keys::all();
+		$active = array_filter( $keys, static function ( $k ) {
+			return 'active' === $k['status'];
+		} );
+
+		$prompts  = array();
+		$selected = '';
+		foreach ( $active as $k ) {
+			$prompts[ $k['id'] ] = self::build_agent_prompt( $k );
+			if ( '' === $selected ) {
+				$selected = $k['id'];
 			}
 		}
-
-		$prompt = self::build_agent_prompt( $key );
 
 		?>
 		<div class="wpa-card">
 			<h2><?php esc_html_e( 'Send this prompt to your AI agent', 'wp-agent' ); ?></h2>
 			<p class="description">
-				<?php esc_html_e( 'Copy the markdown below and paste it into the instructions (system prompt) of your AI agent. It points the agent to the machine-readable /docs endpoint.', 'wp-agent' ); ?>
+				<?php esc_html_e( 'Pick the API key to embed, copy the markdown below and paste it into the instructions (system prompt) of your AI agent. It points the agent to the machine-readable /docs endpoint.', 'wp-agent' ); ?>
 			</p>
 
-			<?php if ( null === $key ) : ?>
+			<?php if ( empty( $active ) ) : ?>
 				<p class="description"><?php esc_html_e( 'Create an API key first: it will be inserted into the prompt.', 'wp-agent' ); ?></p>
 			<?php else : ?>
-				<p class="description">
-					<?php
-					printf(
-						/* translators: %s: key name. */
-						esc_html__( 'Using key: %s (the plaintext key is shown here for setup only — it is not stored).', 'wp-agent' ),
-						'<strong>' . esc_html( $key['name'] ) . '</strong>'
-					);
-					?>
+				<p>
+					<label for="wpa-setup-key"><strong><?php esc_html_e( 'API key:', 'wp-agent' ); ?></strong></label>
+					<select id="wpa-setup-key" class="regular-text">
+						<?php foreach ( $active as $k ) : ?>
+							<option value="<?php echo esc_attr( $k['id'] ); ?>">
+								<?php echo esc_html( $k['name'] . ' (' . substr( $k['id'], 0, 8 ) . '…)' ); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
 				</p>
 			<?php endif; ?>
 
-			<textarea id="wpa-agent-prompt" class="large-text code wpa-prompt" rows="22" readonly><?php echo esc_textarea( $prompt ); ?></textarea>
+			<textarea id="wpa-agent-prompt" class="large-text code wpa-prompt" rows="22" readonly><?php echo esc_textarea( $prompts[ $selected ] ?? '' ); ?></textarea>
 			<p>
 				<button type="button" class="button button-primary" id="wpa-copy-prompt"><?php esc_html_e( 'Copy prompt', 'wp-agent' ); ?></button>
 				<span class="wpa-copy-ok" id="wpa-copy-ok"><?php esc_html_e( 'Copied to clipboard.', 'wp-agent' ); ?></span>
@@ -293,24 +306,31 @@ class WPAgent_Admin {
 
 		<script>
 		(function () {
+			var prompts = <?php echo wp_json_encode( $prompts ); ?>;
+			var select  = document.getElementById('wpa-setup-key');
+			var ta      = document.getElementById('wpa-agent-prompt');
+			if (select && ta) {
+				select.addEventListener('change', function () {
+					ta.value = prompts[select.value] || '';
+				});
+			}
 			var btn = document.getElementById('wpa-copy-prompt');
-			if (!btn) { return; }
-			btn.addEventListener('click', function () {
-				var ta = document.getElementById('wpa-agent-prompt');
-				if (!ta) { return; }
-				ta.focus();
-				ta.select();
-				var done = function () {
-					var ok = document.getElementById('wpa-copy-ok');
-					if (ok) { ok.style.display = 'inline'; }
-				};
-				if (navigator.clipboard && window.isSecureContext) {
-					navigator.clipboard.writeText(ta.value).then(done, done);
-				} else {
-					try { document.execCommand('copy'); } catch (e) {}
-					done();
-				}
-			});
+			if (btn && ta) {
+				btn.addEventListener('click', function () {
+					ta.focus();
+					ta.select();
+					var done = function () {
+						var ok = document.getElementById('wpa-copy-ok');
+						if (ok) { ok.style.display = 'inline'; }
+					};
+					if (navigator.clipboard && window.isSecureContext) {
+						navigator.clipboard.writeText(ta.value).then(done, done);
+					} else {
+						try { document.execCommand('copy'); } catch (e) {}
+						done();
+					}
+				});
+			}
 		})();
 		</script>
 		<?php
@@ -337,7 +357,9 @@ class WPAgent_Admin {
 		$lines[] = '';
 
 		if ( $key ) {
-			$lines[] = sprintf( 'API key (token): %s  (agent name: %s)', $key['id'], $key['name'] );
+			$lines[] = sprintf( 'Agent name: %s', $key['name'] );
+			$lines[] = sprintf( 'Token id: %s', $key['id'] );
+			$lines[] = 'API key: wpa_...  (replace wpa_... with the full wpa_ key that was shown when this token was created — it is not stored on the server)';
 			$lines[] = '';
 		}
 
@@ -402,8 +424,15 @@ class WPAgent_Admin {
 					<?php wp_nonce_field( 'wpa_save_whitelist' ); ?>
 					<input type="hidden" name="action" value="wpa_save_whitelist">
 					<p>
+						<label>
+							<input type="checkbox" name="enabled" value="1" <?php echo WPAgent_Exec::whitelist_enabled() ? 'checked' : ''; ?>>
+							<?php esc_html_e( 'Enable the global whitelist', 'wp-agent' ); ?>
+						</label>
+					</p>
+					<p>
 						<textarea name="whitelist" class="large-text code" rows="14"><?php echo esc_textarea( implode( "\n", WPAgent_Exec::whitelist() ) ); ?></textarea>
 					</p>
+					<p class="description"><?php esc_html_e( 'When disabled, the whitelist does not restrict any command. The blacklist is always enforced.', 'wp-agent' ); ?></p>
 					<?php submit_button( __( 'Save whitelist', 'wp-agent' ), 'primary', 'submit', false ); ?>
 				</form>
 			</div>
@@ -570,10 +599,10 @@ class WPAgent_Admin {
 	}
 
 	/**
-	 * Saves a key's per-token permissions and override flag.
+	 * Saves a key's per-token permissions, override, whitelist and blacklist.
 	 */
 	public static function handle_save_key_perms() {
-		$id    = isset( $_POST['id'] ) ? sanitize_text_field( wp_unslash( $_POST['id'] ) ) : '';
+		$id = isset( $_POST['id'] ) ? sanitize_text_field( wp_unslash( $_POST['id'] ) ) : '';
 		self::guard( 'wpa_save_key_perms_' . $id );
 
 		$perms = isset( $_POST['perms'] ) && is_array( $_POST['perms'] ) ? wp_unslash( $_POST['perms'] ) : array();
@@ -585,6 +614,10 @@ class WPAgent_Admin {
 			)
 		);
 		WPAgent_Keys::set_override( $id, ! empty( $_POST['override'] ) );
+
+		$whitelist  = isset( $_POST['whitelist'] ) ? sanitize_textarea_field( wp_unslash( $_POST['whitelist'] ) ) : '';
+		$blacklist  = isset( $_POST['blacklist'] ) ? sanitize_textarea_field( wp_unslash( $_POST['blacklist'] ) ) : '';
+		WPAgent_Keys::set_lists( $id, $whitelist, $blacklist, ! empty( $_POST['wl_enabled'] ) );
 
 		wp_safe_redirect( admin_url( 'admin.php?page=wp-agent&tab=keys' ) );
 		exit;
@@ -609,7 +642,7 @@ class WPAgent_Admin {
 	}
 
 	/**
-	 * Saves the command whitelist.
+	 * Saves the command whitelist and its enabled state.
 	 */
 	public static function handle_save_whitelist() {
 		self::guard( 'wpa_save_whitelist' );
@@ -619,6 +652,7 @@ class WPAgent_Admin {
 			return '' !== $l;
 		} ) );
 		update_option( WPA_OPTION_WHITELIST, $lines );
+		update_option( WPA_OPTION_WHITELIST_ENABLED, empty( $_POST['enabled'] ) ? 0 : 1 );
 		wp_safe_redirect( admin_url( 'admin.php?page=wp-agent&tab=settings' ) );
 		exit;
 	}

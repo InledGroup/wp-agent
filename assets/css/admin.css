@@ -36,5 +36,10 @@
 .wpa-perms-form label.wpa-perm-label { display: block; margin: 2px 0; font-size: 12px; }
 .wpa-perms-form .button { margin-top: 6px; }
 
+.wpa-perms-form details.wpa-lists { margin: 6px 0; }
+.wpa-perms-form details.wpa-lists summary { cursor: pointer; font-weight: 600; margin: 4px 0; }
+.wpa-perms-form label.wpa-field-label { display: block; margin-top: 6px; font-weight: 600; font-size: 12px; }
+.wpa-perms-form textarea { width: 100%; margin: 2px 0 4px; }
+
 .wpa-prompt { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.5; }
 .wpa-copy-ok { display: none; color: #0a5c1f; font-weight: 600; margin-left: 8px; }

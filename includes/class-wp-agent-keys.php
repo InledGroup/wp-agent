@@ -74,6 +74,9 @@ class WPAgent_Keys {
 				'exec' => 0,
 			),
 			'override'  => 0,
+			'whitelist' => array(),
+			'wl_enabled'=> 1,
+			'blacklist' => array(),
 			'created'   => current_time( 'mysql' ),
 			'last_used' => '',
 		);
@@ -199,6 +202,50 @@ class WPAgent_Keys {
 	}
 
 	/**
+	 * Sets the per-token command whitelist and blacklist.
+	 *
+	 * @param string $id          Key id.
+	 * @param array  $whitelist   Commands allowed for this token.
+	 * @param array  $blacklist   Commands blocked for this token.
+	 * @param bool   $wl_enabled  Whether the token whitelist is enabled.
+	 * @return bool
+	 */
+	public static function set_lists( $id, $whitelist = array(), $blacklist = array(), $wl_enabled = true ) {
+		$keys = self::all();
+		$done = false;
+		foreach ( $keys as &$key ) {
+			if ( isset( $key['id'] ) && $key['id'] === $id ) {
+				$key['whitelist']  = self::clean_lines( $whitelist );
+				$key['blacklist']  = self::clean_lines( $blacklist );
+				$key['wl_enabled'] = $wl_enabled ? 1 : 0;
+				$done              = true;
+			}
+		}
+		unset( $key );
+		if ( $done ) {
+			update_option( WPA_OPTION_KEYS, $keys );
+		}
+		return $done;
+	}
+
+	/**
+	 * Normalizes raw lines into a trimmed, non-empty list.
+	 *
+	 * @param mixed $lines Raw value.
+	 * @return array
+	 */
+	protected static function clean_lines( $lines ) {
+		if ( is_array( $lines ) ) {
+			$lines = implode( "\n", $lines );
+		}
+		$lines = (string) $lines;
+		$lines = preg_split( '/\r?\n/', $lines );
+		return array_values( array_filter( array_map( 'trim', $lines ), static function ( $l ) {
+			return '' !== $l;
+		} ) );
+	}
+
+	/**
 	 * Validates a plaintext key against the stored hashes.
 	 *
 	 * @param string $plain Key received.
@@ -299,13 +346,23 @@ class WPAgent_Keys {
 	 */
 	protected static function normalize( $key ) {
 		$defaults = array(
-			'perms'    => array(
+			'perms'      => array(
 				'read' => 1,
 				'exec' => 0,
 			),
-			'override' => 0,
-			'status'   => 'active',
+			'override'   => 0,
+			'whitelist'  => array(),
+			'wl_enabled' => 1,
+			'blacklist'  => array(),
+			'status'     => 'active',
 		);
-		return array_merge( $defaults, $key );
+		$key       = array_merge( $defaults, $key );
+		if ( ! is_array( $key['whitelist'] ) ) {
+			$key['whitelist'] = array();
+		}
+		if ( ! is_array( $key['blacklist'] ) ) {
+			$key['blacklist'] = array();
+		}
+		return $key;
 	}
 }

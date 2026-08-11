@@ -72,6 +72,15 @@ class WPAgent_Exec {
 	}
 
 	/**
+	 * Whether the global whitelist is enabled.
+	 *
+	 * @return bool
+	 */
+	public static function whitelist_enabled() {
+		return (bool) get_option( WPA_OPTION_WHITELIST_ENABLED, 1 );
+	}
+
+	/**
 	 * Blacklist global de comandos (se aplica siempre, antes que la whitelist).
 	 *
 	 * @return array
@@ -86,22 +95,84 @@ class WPAgent_Exec {
 	}
 
 	/**
-	 * Comprueba si un comando está en la blacklist global.
+	 * Whitelist efectiva para una clave (o null si no hay restricción).
 	 *
-	 * @param string $command Comando normalizado, sin el "wp".
+	 * Reglas:
+	 * - Con override activado, la whitelist del token reemplaza a la global.
+	 *   Si la whitelist del token está deshabilitada => null (sin restricción).
+	 *   Si está habilitada pero vacía => array() (bloquear todo).
+	 * - Sin override, se unen la global (si está habilitada) y la del token
+	 *   (si está habilitada).
+	 *
+	 * @param array|null $key Clave normalizada, o null para usar solo la global.
+	 * @return array|null
+	 */
+	public static function whitelist_for_key( $key = null ) {
+		$global = self::whitelist_enabled() ? self::whitelist() : array();
+
+		if ( empty( $key ) ) {
+			return $global;
+		}
+
+		$key       = WPAgent_Keys::normalize( $key );
+		$wl_enabled = ! empty( $key['wl_enabled'] );
+		$token_wl   = is_array( $key['whitelist'] ) ? $key['whitelist'] : array();
+
+		if ( ! empty( $key['override'] ) ) {
+			if ( ! $wl_enabled ) {
+				return null;
+			}
+			return $token_wl;
+		}
+
+		if ( $wl_enabled && ! empty( $token_wl ) ) {
+			return array_values( array_unique( array_merge( $global, $token_wl ) ) );
+		}
+
+		return $global;
+	}
+
+	/**
+	 * Blacklist efectiva para una clave.
+	 *
+	 * Con override activado la blacklist del token reemplaza a la global;
+	 * sin override se unen ambas.
+	 *
+	 * @param array|null $key Clave normalizada, o null para usar solo la global.
+	 * @return array
+	 */
+	public static function blacklist_for_key( $key = null ) {
+		$global = self::blacklist();
+
+		if ( empty( $key ) ) {
+			return $global;
+		}
+
+		$key      = WPAgent_Keys::normalize( $key );
+		$token_bl = is_array( $key['blacklist'] ) ? $key['blacklist'] : array();
+
+		if ( ! empty( $key['override'] ) ) {
+			return $token_bl;
+		}
+
+		return array_values( array_unique( array_merge( $global, $token_bl ) ) );
+	}
+
+	/**
+	 * Comprueba si un comando coincide con alguna entrada de una lista
+	 * (por palabras completas: la entrada debe ser prefijo del comando).
+	 *
+	 * @param string $command Comando normalizado.
+	 * @param array  $list    Lista de entradas.
 	 * @return bool
 	 */
-	public static function is_blacklisted( $command ) {
-		$command = trim( (string) $command );
-		if ( '' === $command ) {
-			return false;
-		}
-		foreach ( self::blacklist() as $blocked ) {
-			$blocked = trim( (string) $blocked );
-			if ( '' === $blocked ) {
+	protected static function matches_list( $command, $list ) {
+		foreach ( (array) $list as $entry ) {
+			$entry = trim( (string) $entry );
+			if ( '' === $entry ) {
 				continue;
 			}
-			if ( $command === $blocked || 0 === strpos( $command, $blocked . ' ' ) ) {
+			if ( $command === $entry || 0 === strpos( $command, $entry . ' ' ) ) {
 				return true;
 			}
 		}
@@ -109,34 +180,44 @@ class WPAgent_Exec {
 	}
 
 	/**
-	 * Comprueba si un comando (normalizado) está permitido por la whitelist.
+	 * Comprueba si un comando está en la blacklist efectiva de una clave.
 	 *
-	 * La coincidencia es por prefijo: el comando debe empezar por alguna
-	 * entrada de la whitelist (se compara por palabras completas).
-	 *
-	 * @param string $command Comando normalizado, sin el "wp".
+	 * @param string     $command Comando normalizado, sin el "wp".
+	 * @param array|null $key     Clave normalizada.
 	 * @return bool
 	 */
-	public static function is_allowed( $command ) {
+	public static function is_blacklisted( $command, $key = null ) {
 		$command = trim( (string) $command );
 		if ( '' === $command ) {
 			return false;
 		}
-		if ( self::is_blacklisted( $command ) ) {
+		return self::matches_list( $command, self::blacklist_for_key( $key ) );
+	}
+
+	/**
+	 * Comprueba si un comando (normalizado) está permitido para una clave.
+	 *
+	 * @param string     $command Comando normalizado, sin el "wp".
+	 * @param array|null $key     Clave normalizada.
+	 * @return bool
+	 */
+	public static function is_allowed( $command, $key = null ) {
+		$command = trim( (string) $command );
+		if ( '' === $command ) {
 			return false;
 		}
 
-		foreach ( self::whitelist() as $allowed ) {
-			$allowed = trim( (string) $allowed );
-			if ( '' === $allowed ) {
-				continue;
-			}
-			// Coincidencia exacta o "comando subcomando" que empieza por la entrada.
-			if ( $command === $allowed || 0 === strpos( $command, $allowed . ' ' ) ) {
-				return true;
-			}
+		$whitelist = self::whitelist_for_key( $key );
+		if ( null === $whitelist ) {
+			// Whitelist deshabilitada para esta clave: solo aplica la blacklist.
+			return ! self::is_blacklisted( $command, $key );
 		}
-		return false;
+
+		if ( self::is_blacklisted( $command, $key ) ) {
+			return false;
+		}
+
+		return self::matches_list( $command, $whitelist );
 	}
 
 	/**
@@ -186,11 +267,12 @@ class WPAgent_Exec {
 	/**
 	 * Ejecuta un comando permitido y devuelve la salida.
 	 *
-	 * @param string $command Comando estilo wp-cli, con o sin el prefijo "wp".
-	 * @param int    $timeout Timeout en segundos.
+	 * @param string     $command Comando estilo wp-cli, con o sin el prefijo "wp".
+	 * @param int        $timeout Timeout en segundos.
+	 * @param array|null $key     Clave normalizada (para sus listas de comandos).
 	 * @return array {success, output, command}
 	 */
-	public static function run( $command, $timeout = 60 ) {
+	public static function run( $command, $timeout = 60, $key = null ) {
 		$command = self::normalize( $command );
 
 		if ( '' === $command ) {
@@ -201,10 +283,10 @@ class WPAgent_Exec {
 			);
 		}
 
-		if ( ! self::is_allowed( $command ) ) {
+		if ( ! self::is_allowed( $command, $key ) ) {
 			return array(
 				'success' => false,
-				'output'  => 'Command not allowed by the whitelist: ' . $command,
+				'output'  => 'Command not allowed: ' . $command,
 				'command' => $command,
 			);
 		}

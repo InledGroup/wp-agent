@@ -22,6 +22,7 @@ define( 'WPA_OPTION_KEYS', 'wpa_keys' );
 define( 'WPA_OPTION_PANIC', 'wpa_panic' );
 define( 'WPA_OPTION_PERMS', 'wpa_perms' );
 define( 'WPA_OPTION_WHITELIST', 'wpa_exec_whitelist' );
+define( 'WPA_OPTION_WHITELIST_ENABLED', 'wpa_exec_whitelist_enabled' );
 define( 'WPA_OPTION_BLACKLIST', 'wpa_exec_blacklist' );
 define( 'WPA_LOG_TABLE', 'wpa_logs' );
 define( 'WPA_API_NS', 'wp-agent/v1' );
@@ -40,6 +41,7 @@ function wpa_activate() {
 	add_option( WPA_OPTION_PANIC, 0 );
 	add_option( WPA_OPTION_PERMS, array( 'read' => 1, 'exec' => 0 ) );
 	add_option( WPA_OPTION_WHITELIST, WPAgent_Exec::default_whitelist() );
+	add_option( WPA_OPTION_WHITELIST_ENABLED, 1 );
 	add_option( WPA_OPTION_BLACKLIST, array() );
 }
 

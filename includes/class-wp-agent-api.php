@@ -629,7 +629,7 @@ class WPAgent_Api {
 
 		// Comprobar whitelist/blacklist antes de autorizar.
 		$command = WPAgent_Exec::normalize( $request->get_param( 'command' ) );
-		if ( '' === $command || ! WPAgent_Exec::is_allowed( $command ) ) {
+		if ( '' === $command || ! WPAgent_Exec::is_allowed( $command, $key ) ) {
 			WPAgent_Logger::log(
 				array(
 					'key_name' => isset( $key['name'] ) ? $key['name'] : '',
@@ -662,7 +662,7 @@ class WPAgent_Api {
 		$command = WPAgent_Exec::normalize( $request->get_param( 'command' ) );
 		$timeout = (int) $request->get_param( 'timeout' );
 
-		$result = WPAgent_Exec::run( $command, $timeout );
+		$result = WPAgent_Exec::run( $command, $timeout, $key );
 
 		WPAgent_Logger::log(
 			array(
@@ -738,18 +738,24 @@ class WPAgent_Api {
 			$md .= "Runs a wp-cli command on the site. Send a JSON body:\n\n";
 			$md .= "```json\n{\"command\": \"option get blogname\"}\n```\n\n";
 			$md .= "Accepted forms: `\"option get blogname\"` or `\"wp option get blogname\"`. Optional `timeout` (seconds, max 300).\n\n";
-			$md .= "Only commands matching the configured whitelist are allowed. The global blacklist always applies.\n\n";
+			$md .= "Only commands matching the effective whitelist for this key are allowed (unless the whitelist is disabled). The blacklist always applies.\n\n";
 			$md .= "```\ncurl -X POST -H \"Authorization: Bearer wpa_...\" -H \"Content-Type: application/json\" \\\n  -d '{\"command\":\"option get blogname\"}' \\\n  \"" . esc_url( home_url( '/' ) ) . "wp-json/" . WPA_API_NS . "/exec\"\n```\n\n";
 		}
 
-		$md .= "## Allowed commands (whitelist)\n\n";
-		$md .= "```\n" . implode( "\n", WPAgent_Exec::whitelist() ) . "\n```\n\n";
-
-		$blacklist = WPAgent_Exec::blacklist();
-		if ( ! empty( $blacklist ) ) {
-			$md .= "## Globally blocked commands (blacklist)\n\n";
-			$md .= "```\n" . implode( "\n", $blacklist ) . "\n```\n\n";
+		$md .= "## Command rules for this key\n\n";
+		$effective_wl = WPAgent_Exec::whitelist_for_key( $key );
+		if ( null === $effective_wl ) {
+			$md .= "The whitelist is **disabled** for this key: any command not blocked by the blacklist is allowed.\n\n";
+		} else {
+			$md .= "Only commands matching the whitelist are allowed (and never anything in the blacklist).\n\n";
 		}
+
+		$md .= "### Allowed commands (effective whitelist)\n\n";
+		$md .= "```\n" . implode( "\n", $effective_wl ) . "\n```\n\n";
+
+		$effective_bl = WPAgent_Exec::blacklist_for_key( $key );
+		$md .= "### Blocked commands (effective blacklist)\n\n";
+		$md .= "```\n" . implode( "\n", $effective_bl ) . "\n```\n\n";
 
 		$md .= "## Error responses\n\n";
 		$md .= "- `401` invalid or missing key.\n";
