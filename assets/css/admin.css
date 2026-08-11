@@ -1,0 +1,40 @@
+.wpa-cols { display: grid; grid-template-columns: 1fr 1.4fr; gap: 20px; align-items: start; margin-top: 16px; }
+@media (max-width: 960px) { .wpa-cols { grid-template-columns: 1fr; } }
+
+.wpa-card { background: #fff; border: 1px solid #c3c4c7; border-radius: 8px; padding: 16px 20px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.wpa-card h2 { margin-top: 0; }
+
+.wpa-panic-banner { margin: 12px 0; }
+
+.wpa-new-key pre.wpa-key-plain {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  background: #f0f6fc;
+  border: 1px solid #c3d8ee;
+  border-radius: 6px;
+  padding: 10px 12px;
+  word-break: break-all;
+  white-space: pre-wrap;
+  user-select: all;
+}
+.wpa-new-key p.wpa-key-name { margin: 8px 0 0; color: #50575e; }
+
+.wpa-key-id { color: #787c82; font-size: 12px; }
+
+.wpa-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.wpa-badge--active { background: #e6f6e6; color: #0a5c1f; }
+.wpa-badge--revoked { background: #fdeaea; color: #8a1f1f; }
+
+.wpa-revoked td { opacity: .55; }
+.wpa-muted { color: #787c82; }
+
+.wpa-panic-form { margin-top: 20px; padding-top: 16px; border-top: 1px solid #dcdcde; }
+
+.wpa-wrap form.inline { display: inline; margin: 0; }
+.wpa-wrap form.inline .button { margin-right: 4px; }
+
+.wpa-perms-form label.wpa-perm-label { display: block; margin: 2px 0; font-size: 12px; }
+.wpa-perms-form .button { margin-top: 6px; }
+
+.wpa-prompt { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.5; }
+.wpa-copy-ok { display: none; color: #0a5c1f; font-weight: 600; margin-left: 8px; }
